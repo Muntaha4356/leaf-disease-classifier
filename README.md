@@ -20,6 +20,7 @@ Secondary goal: use the same problem to deliberately practice supervised deep le
 ## Dataset
 
 **PlantVillage Dataset** (Kaggle) — ~54,000 labeled leaf images across healthy and diseased classes for crops including tomato, potato, corn, and others.
+kaggle.com/datasets/abdallahalidev/plantvillage-dataset
 
 - Source: Kaggle, search "PlantVillage Dataset"
 - Format: folder-per-class structure, RGB images
