@@ -40,3 +40,7 @@ target: Purchased (binary)
   before adding the complexity of convolutional layers
 - This is my "Phase 0" — the foundational rep before Phase 1 (CNN on PlantVillage)
 
+### Today I worked with handling imbalanced dataset
+- Today I used the Churn prediction dataset to practice dealing with imbalanced dataset.
+- I worked with four techniques random undersampling, random oversampling, SMOTE, and ensemble bagging with undersampling
+
