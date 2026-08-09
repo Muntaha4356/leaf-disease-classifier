@@ -1,0 +1,64 @@
+## Phase 1 — CNN From Scratch: Overfitting Observed & What Fixed It
+
+### Setup
+- **Dataset:** PlantVillage (`color` folder) — 54,305 images across 38 disease/healthy classes, spanning 14 crop species (tomato, potato, corn, apple, grape, etc.)
+- **Split:** 80/20 → 43,444 training images, 10,861 validation images
+- **Preprocessing:** images resized to 128×128, batch size 32, pixel values rescaled to 0–1 via a `Rescaling(1./255)` layer inside the model
+- **Hardware:** Kaggle Notebook, GPU T4 x2
+
+---
+
+### Round 1 — Plain CNN (no regularization)
+
+**Architecture:** Rescaling → Conv2D(32) → MaxPool → Conv2D(64) → MaxPool → Flatten → Dense(64) → Dense(38, softmax)
+
+Trained for 5 epochs. Final epoch: **94.5% train accuracy, 86.8% validation accuracy.**
+
+The numbers looked good on the surface, but looking at the epoch-by-epoch trend told a different story:
+
+| Epoch | Train Acc | Train Loss | Val Acc | Val Loss |
+|-------|-----------|------------|---------|----------|
+| 1 | 62.3% | 1.35 | 78.0% | 0.72 |
+| 3 | 88.5% | 0.36 | 85.8% | 0.47 |
+| 5 | 94.5% | 0.17 | 86.8% | **0.50** |
+
+Between epoch 3 and epoch 5, `val_loss` started climbing back up (0.47 → 0.50) even though `train_loss` kept dropping sharply (0.36 → 0.17). That divergence — the model getting more confident on training data while getting *less* accurate on unseen validation data — is the classic early signature of overfitting. Caught early, but real.
+
+**Conclusion:** the plain CNN needed regularization before it would generalize well over more training time.
+
+---
+
+### Round 2 — Adding augmentation + BatchNorm + Dropout together (failed)
+
+To fix the overfitting, three techniques were added at once:
+- Data augmentation (`RandomFlip`, `RandomRotation`, `RandomZoom`)
+- `BatchNormalization` after each Conv2D layer
+- `Dropout(0.5)` before the output layer
+
+Trained for 5 epochs. Result: **15.3% train accuracy, 19.7% validation accuracy** — barely above the ~2.6% random-guess baseline for 38 classes. `val_loss` spiked to **11.17** at epoch 4 before settling slightly.
+
+**Diagnosis:** stacking all three regularization techniques simultaneously was too much change at once. The most likely culprit was `BatchNormalization` interacting badly with the combination of heavy augmentation (which increases batch-to-batch variance) and high dropout — destabilizing training rather than helping it. This was a genuinely useful failure: it's a real example of over-regularizing a model, and a lesson in isolating variables one at a time instead of changing everything simultaneously.
+
+---
+
+### Round 3 — Removing BatchNorm, keeping augmentation + Dropout
+
+Same architecture, **BatchNormalization removed**, augmentation + `Dropout(0.5)` kept. Retrained, extended to 15 then 25 epochs to give the regularized model enough time to converge (regularized networks typically need more epochs than an unregularized baseline).
+
+**25-epoch result:**
+- Validation accuracy settled between **85–92%**, consistently *above* training accuracy (76–82%)
+- Validation loss stayed low and stable (**0.3–0.4**) while training loss declined steadily (0.78 → 0.58), with no upward drift
+
+This is the opposite pattern from Round 1, and it's the correct pattern: with augmentation active, training images are artificially harder (randomly flipped/rotated/zoomed) while validation images are shown normally, so validation accuracy sitting above training accuracy is expected — not a bug. The steady, non-diverging `val_loss` confirms the overfitting from Round 1 is resolved.
+
+---
+
+### Key Takeaways
+1. **Watch the trend, not just the final number.** 86.8% val accuracy in Round 1 looked fine in isolation, but the epoch-by-epoch `val_loss` direction revealed early overfitting the final number alone wouldn't have shown.
+2. **Regularization techniques can conflict with each other.** Adding augmentation, BatchNorm, and Dropout all at once caused training to destabilize rather than improve — isolating and removing BatchNorm fixed it.
+3. **Augmented models need more epochs.** 5 epochs was enough for the plain CNN to overfit, but nowhere near enough for the regularized version to show its benefit — it was still improving at epoch 15 and needed 25 to stabilize.
+4. **Val accuracy > train accuracy is a healthy sign when using augmentation**, not a red flag — it reflects that training data is being deliberately made harder than validation data.
+
+### Models Saved
+- `leaf_disease_cnn_v1.keras` — plain CNN baseline (Round 1)
+- `leaf_disease_cnn_v2.keras` — final regularized CNN, augmentation + Dropout, no BatchNorm (Round 3, 25 epochs)
