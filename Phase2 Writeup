@@ -1,0 +1,72 @@
+## Phase 2 — Transfer Learning: Frozen Base, Fine-Tuning & Class Imbalance
+
+### Setup
+Built on top of Phase 1's data pipeline (same `train_ds`/`val_ds`, 128×128 images, 38 classes). Used **MobileNetV2** pretrained on ImageNet as the base.
+
+---
+
+### Round 1 — Frozen Base + Custom Head
+
+Loaded MobileNetV2 with `include_top=False`, froze all its layers, and added a custom head: `GlobalAveragePooling2D → Dropout(0.3) → Dense(38, softmax)`. Used `preprocess_input` (MobileNetV2's expected -1 to 1 pixel range) instead of the 0–1 rescaling used in Phase 1 — a different normalization is required for every pretrained model, and using the wrong one silently hurts accuracy without throwing an error.
+
+Trained for 15 epochs, only the head's parameters (48,678 of them) actually updating.
+
+**Result:** 96.3% train accuracy, **95.5% validation accuracy**, val_loss 0.152, training time ~596.7s.
+
+---
+
+### Round 2 — Fine-Tuning
+
+Unfroze the last 30 layers of MobileNetV2 (the most task-specific ones, leaving early generic-feature layers frozen) and recompiled with a much lower learning rate (`1e-5`, vs Adam's default `0.001`) to avoid catastrophic forgetting — large updates at this stage would overwrite the useful pretrained weights instead of gently adapting them toward leaf-specific features.
+
+Trained 10 more epochs. Trainable parameters jumped from 48,678 to 1,575,078.
+
+**Result:** 98.8% train accuracy, **98.2% validation accuracy**, val_loss 0.058, training time ~349.6s.
+
+Fine-tuning gave a real, meaningful improvement over the frozen baseline — proof that letting the deepest pretrained layers adapt specifically to leaf textures/patterns measurably helps, beyond just relying on generic ImageNet features.
+
+---
+
+### Comparison Table
+
+| Model | Val Accuracy | Val Loss | Total Params | Trainable Params | Training Time |
+|---|---|---|---|---|---|
+| Scratch CNN (Phase 1) | 89.1% | 0.346 | 11,124,980 | 3,708,326 | — |
+| Frozen MobileNetV2 | 95.5% | 0.152 | 2,404,020 | 48,678 | ~10.0 min |
+| Fine-tuned MobileNetV2 | 98.2% | 0.058 | 5,456,820 | 1,575,078 | ~5.8 min |
+
+Transfer learning won on both accuracy *and* efficiency — the frozen model matched/beat the scratch CNN using **236x fewer trainable parameters**. Fine-tuning then pushed accuracy further while still using far fewer total parameters than the scratch CNN's oversized `Flatten → Dense` head.
+
+---
+
+### Evaluation Beyond Accuracy
+
+Ran `classification_report` and a confusion matrix on the fine-tuned model. Overall accuracy (98%) hid a real issue: **`Potato___healthy`** had only 24 validation images (vs. 1,000+ for well-represented classes like Soybean_healthy), and its recall sat at just **0.79** — the model was missing roughly 1 in 5 real healthy-potato cases, a class-imbalance problem invisible in the aggregate accuracy number. `Tomato___Early_blight` also stood out with the lowest F1 (0.84) despite adequate support, likely due to visual similarity with Late_blight and Septoria_leaf_spot.
+
+### Fixing the Imbalance
+
+Applied `class_weight='balanced'` (computed via `sklearn.utils.class_weight.compute_class_weight`) and continued training the fine-tuned model for 5 more epochs.
+
+| Metric | Before | After |
+|---|---|---|
+| Potato_healthy recall | 0.79 | **1.00** |
+| Potato_healthy F1 | 0.88 | **0.91** |
+| Tomato_Early_blight F1 | 0.84 | 0.88 |
+| Overall accuracy | 98% | **99%** |
+| Macro avg F1 | 0.97 | 0.98 |
+
+Class weighting closed the gap on the weakest class entirely (recall 0.79 → 1.00) without costing overall accuracy — accuracy actually improved slightly, suggesting the model had previously been "wasting" some capacity being overconfident on majority classes.
+
+---
+
+### Key Takeaways
+1. **Pretrained weights encode transferable general vision features** — MobileNetV2's frozen ImageNet weights (never having seen a single leaf) still got a 95.5% val accuracy head start with under 50K trainable parameters.
+2. **Fine-tuning needs a much lower learning rate than initial training**, or it destroys the pretrained weights it's supposed to be adapting.
+3. **Preprocessing must match the pretrained model** — MobileNetV2 expects -1 to 1 inputs, not the 0-1 range used for a from-scratch CNN.
+4. **Overall accuracy hides per-class problems.** A 98% accurate model still missed 1-in-5 real cases of one specific class — only `classification_report` and a confusion matrix surfaced this.
+5. **`class_weight='balanced'` is a low-cost, high-value fix** for exactly this kind of imbalance, and in this case improved overall accuracy rather than trading it off.
+
+### Models Saved
+- `leaf_disease_transfer_frozen.keras` — frozen-base model (Round 1)
+- `leaf_disease_transfer_finetuned.keras` — fine-tuned model, before class balancing (Round 2)
+- `leaf_disease_transfer_finetuned_balanced.keras` — final model, class-weighted (best-performing, used going forward)

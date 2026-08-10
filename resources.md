@@ -40,3 +40,12 @@ target: Purchased (binary)
   before adding the complexity of convolutional layers
 - This is my "Phase 0" — the foundational rep before Phase 1 (CNN on PlantVillage)
 
+### Today I worked with handling imbalanced dataset
+- Today I used the Churn prediction dataset to practice dealing with imbalanced dataset.
+- I worked with four techniques random undersampling, random oversampling, SMOTE, and ensemble bagging with undersampling
+
+
+### CNN
+I am starting working with CNN. I shall soon prepare my medium post covering all the theory that I covered.
+For the code practice I am building project using dataset: https://www.kaggle.com/c/cifar-10
+I shall make separate repository for this or same repo with separate readme.md
