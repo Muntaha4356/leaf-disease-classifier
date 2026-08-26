@@ -1,9 +1,12 @@
 import streamlit as st
 import numpy as np
+import os
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from PIL import Image
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 IMG_SIZE = 128
 
@@ -29,12 +32,12 @@ st.set_page_config(page_title="Plant Leaf Disease Classifier", page_icon="🌿")
 
 @st.cache_resource
 def load_all_models():
-    scratch_cnn = load_model('leaf_disease_cnn_v2.keras')
+    scratch_cnn = load_model(os.path.join(APP_DIR, 'leaf_disease_cnn_v2.keras'))
     transfer_model = load_model(
-        'leaf_disease_transfer_finetuned_balanced.keras',
+        os.path.join(APP_DIR, 'leaf_disease_transfer_finetuned_balanced.keras'),
         custom_objects={'preprocess_input': preprocess_input}
     )
-    autoencoder = load_model('leaf_autoencoder.keras')
+    autoencoder = load_model(os.path.join(APP_DIR, 'leaf_autoencoder.keras'))
     return scratch_cnn, transfer_model, autoencoder
 
 
